@@ -1,0 +1,186 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+model Student {
+  student_id    Int     @id @default(autoincrement())
+  email         String  @unique
+  name          String
+  gender        Gender
+  year          String
+  hostel        String
+  phone         String  @unique
+  phone_verifed Boolean @default(false)
+
+  college_id Int
+  college    College @relation(fields: [college_id], references: [college_id])
+
+  refresh_tokens StudentRefreshToken[]
+  requests       Request[]
+  trips          Trip[]
+  buyer_visibility_list buyer_visibility_list[]
+  lock_requests_wanted want_to_lock_request_from_buyer_to_requester[]
+  locked_requests locked_requests[]
+  unlocked_by_buyer locked_requests_that_got_unlocked_by_buyer[]
+  unlocked_by_requester locked_requests_that_got_unlocked_by_requester[]
+  requester_visibility_list Requester_visibility_list[]
+}
+
+model College {
+  college_id  Int    @id @default(autoincrement())
+  name        String @unique
+  location    String
+  domain_name String @unique
+
+  students Student[]
+}
+
+model StudentRefreshToken {
+  id            Int    @id @default(autoincrement())
+  student_id    Int    @unique
+  refresh_token String @unique
+
+  student Student @relation(fields: [student_id], references: [student_id], onDelete: Cascade)
+}
+
+enum RequestStatus {
+  AVAILABLE
+  LOCKED
+  COMPLETED
+}
+
+enum RequestVisibility {
+  EVERYONE
+  BUYER_VISIBILITY_LIST
+}
+
+model buyer_visibility_list {
+  requestId       Int
+  possiblebuyerId Int
+
+  request      Request @relation(fields: [requestId], references: [request_id], onDelete: Cascade)
+  possibleBuyer Student @relation(fields: [possiblebuyerId], references: [student_id], onDelete: Cascade)
+
+  @@id([requestId, possiblebuyerId])
+}
+
+model Request {
+  request_id Int @id @default(autoincrement())
+
+  requester_id Int
+  requester    Student @relation(fields: [requester_id], references: [student_id])
+
+  item_name  String
+  brand_name String
+  quantity   Int
+  price      Float
+  image_url  String?
+
+  request_status     RequestStatus     @default(AVAILABLE)
+  request_visibility RequestVisibility @default(EVERYONE)
+
+  creation_time  DateTime @default(now())
+  deleted_or_not Boolean  @default(false)
+
+  buyer_visibility_list buyer_visibility_list[]
+  lock_requests want_to_lock_request_from_buyer_to_requester[]
+  locked_requests locked_requests[]
+  unlocked_by_requester locked_requests_that_got_unlocked_by_requester[]
+  unlocked_by_buyer locked_requests_that_got_unlocked_by_buyer[]
+}
+
+model want_to_lock_request_from_buyer_to_requester {
+  requestId Int
+  buyerId   Int
+
+  approval_from_requester Boolean  @default(false)
+  creation_time           DateTime @default(now())
+
+  request Request @relation(fields: [requestId], references: [request_id], onDelete: Cascade)
+  buyer   Student @relation(fields: [buyerId], references: [student_id])
+
+  @@id([requestId, buyerId])
+}
+
+model locked_requests {
+  requestId Int
+  buyerId   Int
+
+  locked_time DateTime @default(now())
+
+  request Request @relation(fields: [requestId], references: [request_id], onDelete: Cascade)
+  buyer   Student @relation(fields: [buyerId], references: [student_id])
+
+  @@id([requestId, buyerId])
+}
+
+model locked_requests_that_got_unlocked_by_requester {
+  requestId Int
+  buyerId   Int
+
+  unlocked_time DateTime @default(now())
+
+  request Request @relation(fields: [requestId], references: [request_id], onDelete: Cascade)
+  buyer   Student @relation(fields: [buyerId], references: [student_id])
+
+  @@id([requestId, buyerId, unlocked_time])
+}
+
+model locked_requests_that_got_unlocked_by_buyer {
+  requestId Int
+  buyerId   Int
+
+  unlocked_time DateTime @default(now())
+
+  request Request @relation(fields: [requestId], references: [request_id], onDelete: Cascade)
+  buyer   Student @relation(fields: [buyerId], references: [student_id])
+
+  @@id([requestId, buyerId, unlocked_time])
+}
+
+enum TripVisibility {
+  EVERYONE
+  BUYER_VISIBILITY_LIST
+}
+
+model Trip {
+  trip_id Int @id @default(autoincrement())
+
+  student_id Int
+  student    Student @relation(fields: [student_id], references: [student_id])
+
+  location String
+  date_of_travel DateTime
+  trip_visibility TripVisibility @default(EVERYONE)
+  expected_time_of_arrival DateTime?
+  note String?
+  deleted_or_not Boolean @default(false)
+  creation_time DateTime @default(now())
+
+  requester_visibility_list Requester_visibility_list[]
+}
+
+model Requester_visibility_list {
+  trip_id      Int
+  requester_id Int
+
+  trip      Trip    @relation(fields: [trip_id], references: [trip_id], onDelete: Cascade)
+  requester Student @relation(fields: [requester_id], references: [student_id], onDelete: Cascade)
+
+  @@id([trip_id, requester_id])
+}

@@ -1,0 +1,19 @@
+student 
+  - student_id (PK) auto incremented ID
+  - email 
+  - name 
+  - gender 
+  - year
+  - hostel
+  - college_id (FK)
+
+student_refresh_token
+    - student_id (FK) 
+    - refresh_token
+
+
+colleges 
+    - college_id (PK) auto incremented ID
+    - name 
+    - location
+    - domain_name 
