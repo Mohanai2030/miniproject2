@@ -19,7 +19,7 @@ const generateTokens = (student_id) => {
 };
 
 export const signup = async (req, res) => {
-  const { idToken, college_id, phone, gender, year, hostel } = req.body;
+  const { idToken, college_id, phone, gender, year, hostel, fcm_token, fcmToken } = req.body;
   console.log("varatta maame dur")
   try {
     const ticket = await client.verifyIdToken({
@@ -58,6 +58,7 @@ export const signup = async (req, res) => {
         year: year || "1",
         hostel: hostel || "None",
         phone: phone || "",
+        fcm_token: fcm_token || fcmToken || null,
         college_id: college.college_id,
       },
     });
@@ -80,7 +81,7 @@ export const signup = async (req, res) => {
 };
 
 export const login = async (req, res) => {
-  const { idToken } = req.body;
+  const { idToken, fcm_token, fcmToken } = req.body;
 
   try {
     const ticket = await client.verifyIdToken({
@@ -90,12 +91,20 @@ export const login = async (req, res) => {
     const payload = ticket.getPayload();
     const email = payload.email;
 
-    const student = await prisma.student.findUnique({
+    let student = await prisma.student.findUnique({
       where: { email },
     });
 
     if (!student) {
       return res.status(404).json({ error: "Student not found. Please signup." });
+    }
+
+    const tokenToSave = fcm_token || fcmToken;
+    if (tokenToSave && typeof tokenToSave === "string") {
+      student = await prisma.student.update({
+        where: { student_id: student.student_id },
+        data: { fcm_token: tokenToSave },
+      });
     }
 
     const { accessToken, refreshToken } = generateTokens(student.student_id);
@@ -170,3 +179,38 @@ export const logout = async (req, res) => {
     res.status(500).json({ error: "Logout failed" });
   }
 };
+
+export const updateFcmToken = async (req, res) => {
+  const student_id = req.user?.student_id || req.body?.student_id;
+  const fcm_token = req.body?.fcm_token || req.body?.fcmToken || req.body?.token;
+
+  if (!student_id) {
+    return res.status(401).json({ error: "Unauthorized: student_id missing" });
+  }
+
+  if (!fcm_token || typeof fcm_token !== "string") {
+    return res.status(400).json({ error: "fcm_token is required and must be a string" });
+  }
+
+  try {
+    const updatedStudent = await prisma.student.update({
+      where: { student_id: parseInt(student_id) },
+      data: { fcm_token },
+      select: {
+        student_id: true,
+        email: true,
+        name: true,
+        fcm_token: true,
+      },
+    });
+
+    res.status(200).json({
+      message: "FCM token updated successfully",
+      student: updatedStudent,
+    });
+  } catch (error) {
+    console.error("Error updating FCM token:", error);
+    res.status(500).json({ error: "Failed to update FCM token" });
+  }
+};
+

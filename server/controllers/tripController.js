@@ -1,14 +1,14 @@
-import { prisma } from "../lib/prisma.ts";
+import { prisma } from "../../packages/database/lib/prisma.ts";
 
 export const createTrip = async (req, res) => {
   const student_id = req.user.student_id;
-  const { 
-    location, 
-    date_of_travel, 
-    trip_visibility, 
-    expected_time_of_arrival, 
-    note, 
-    requester_visibility_list 
+  const {
+    location,
+    date_of_travel,
+    trip_visibility,
+    expected_time_of_arrival,
+    note,
+    requester_visibility_list
   } = req.body;
 
   if (!location || !date_of_travel) {
@@ -45,6 +45,21 @@ export const createTrip = async (req, res) => {
       }
     });
 
+    // using kafka publisher, publish an event to the notifications topic 
+    // value of the message must be tripId, tripVisibility, and array of studentIds who are in requester visibility list(if trip visbility type is everyone then no one will be in the array),
+    let kafkaMessage = {
+      "tripId": trip.trip_id,
+      "tripVisibility":trip.trip_visibility
+    };
+
+    if (trip.trip_visibility === "BUYER_VISIBILITY_LIST") {
+      kafkaMessage.requesterVisibilityList = trip.requester_visibility_list.map(requester => requester.requester_id)
+    } else {
+      kafkaMessage.requesterVisibilityList = []
+    }
+
+    kafkaProduceMessage("notifications", JSON.stringify(kafkaMessage));
+    
     res.status(201).json(trip);
   } catch (error) {
     console.error("Error creating trip:", error);
