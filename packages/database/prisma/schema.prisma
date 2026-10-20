@@ -156,7 +156,7 @@ model locked_requests_that_got_unlocked_by_buyer {
 
 enum TripVisibility {
   EVERYONE
-  BUYER_VISIBILITY_LIST
+  REQUESTER_VISIBILITY_LIST
 }
 
 model Trip {
