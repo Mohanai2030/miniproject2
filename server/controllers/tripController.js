@@ -15,7 +15,7 @@ export const createTrip = async (req, res) => {
     return res.status(400).json({ error: "Missing required fields: location and date_of_travel" });
   }
 
-  const visibility = trip_visibility === "BUYER_VISIBILITY_LIST" ? "BUYER_VISIBILITY_LIST" : "EVERYONE";
+  const visibility = trip_visibility === "REQUESTER_VISIBILITY_LIST" ? "REQUESTER_VISIBILITY_LIST" : "EVERYONE";
 
   try {
     const tripData = {
@@ -30,7 +30,7 @@ export const createTrip = async (req, res) => {
       tripData.expected_time_of_arrival = new Date(expected_time_of_arrival);
     }
 
-    if (visibility === "BUYER_VISIBILITY_LIST" && Array.isArray(requester_visibility_list) && requester_visibility_list.length > 0) {
+    if (visibility === "REQUESTER_VISIBILITY_LIST" && Array.isArray(requester_visibility_list) && requester_visibility_list.length > 0) {
       tripData.requester_visibility_list = {
         create: requester_visibility_list.map(requester_id => ({
           requester_id: parseInt(requester_id)
@@ -52,7 +52,7 @@ export const createTrip = async (req, res) => {
       "tripVisibility":trip.trip_visibility
     };
 
-    if (trip.trip_visibility === "BUYER_VISIBILITY_LIST") {
+    if (trip.trip_visibility === "REQUESTER_VISIBILITY_LIST") {
       kafkaMessage.requesterVisibilityList = trip.requester_visibility_list.map(requester => requester.requester_id)
     } else {
       kafkaMessage.requesterVisibilityList = []
@@ -67,69 +67,94 @@ export const createTrip = async (req, res) => {
   }
 };
 
+export const myTrips = async (req,res) => {
+  const student_id = req.user.student_id;
+
+  try {
+    const trips = await prisma.trip.findMany({
+      where: { 
+        student_id, 
+      },
+    });
+    res.json(trips);
+  } catch (error) {
+    console.error("Error fetching my trips:", error);
+    res.status(500).json({ error: "Failed to fetch my trips" });
+  }
+}
+
+export const myTripRequesterVisibilityList = async (req,res) => {
+  const trip_id = req.user.TripId;
+  const student_id = req.user.student_id;
+
+  try {
+    const trip_visibility_students = await prisma.trip.findUnique({
+      where: { trip_id, student_id },
+      select: {
+        requester_visibility_list: {
+          select: {
+            requester:{
+              select:{
+                name:true,
+              }
+            }
+          }
+        }
+      }
+    });
+
+    const requester_names = trip_visibility_students.requester_visibility_list.map(t => t.requester.name)
+
+    res.json(requester_names);
+  } catch (error) {
+    console.error("Error fetching my trip requester visibility list:", error);
+    res.status(500).json({ error: "Failed to fetch my trip requester visibility list" });
+  }
+}
+
 export const getAvailableTrips = async (req, res) => {
   const student_id = req.user.student_id;
 
   try {
-    const currentUser = await prisma.student.findUnique({
-      where: { student_id },
-      select: { college_id: true },
-    });
-
-    if (!currentUser) {
-      return res.status(404).json({ error: "Student not found" });
-    }
-
-    const sameCollegeStudents = await prisma.student.findMany({
-      where: { college_id: currentUser.college_id },
-      select: { student_id: true }
-    });
-    const sameCollegeIds = sameCollegeStudents.map(s => s.student_id);
-
-    const rawTrips = await prisma.trip.findMany({
-      where: {
-        student_id: { in: sameCollegeIds },
-        deleted_or_not: false,
-        OR: [
-          { trip_visibility: "EVERYONE" },
-          { student_id }
-        ]
+    const allTripsStudentInvolvedIn = await prisma.trip.findMany({
+      where:{
+        AND:[
+            {
+                deleted_or_not:false,
+                student_id:{
+                    not:student_id
+                },
+                date_of_travel:{
+                    gte: new Date()
+                }
+            },
+            {
+                OR:[
+                    {
+                        trip_visibility: "EVERYONE"
+                    },
+                    {
+                        requester_visibility_list:{
+                        some: {
+                            requester_id: student_id
+                        }
+                        }
+                    }
+                ]
+            }
+        ],
+        
       },
-      include: {
-        student: {
-          select: { name: true, phone: true }
-        }
+      select:{
+        location:true,
+        date_of_travel:true,
+        expected_time_of_arrival:true,
+        note:true,
+        creation_time:true
       }
-    });
+    })
 
-    const tripsWithBuyerVisibility = await prisma.trip.findMany({
-      where: {
-        student_id: { in: sameCollegeIds },
-        deleted_or_not: false,
-        trip_visibility: "BUYER_VISIBILITY_LIST",
-        student_id: { not: student_id },
-        requester_visibility_list: {
-          some: { requester_id: student_id }
-        }
-      },
-      include: {
-        student: {
-          select: { name: true, phone: true }
-        }
-      }
-    });
-
-    const allTripsMap = new Map();
-    rawTrips.forEach(t => allTripsMap.set(t.trip_id, t));
-    tripsWithBuyerVisibility.forEach(t => allTripsMap.set(t.trip_id, t));
-
-    const allTrips = Array.from(allTripsMap.values()).map(t => ({
-      ...t,
-      is_mine: t.student_id === student_id
-    }));
-    allTrips.sort((a, b) => b.creation_time - a.creation_time);
-
-    res.json(allTrips);
+    res.json(allTripsStudentInvolvedIn);
   } catch (error) {
     console.error("Error fetching trips:", error);
     res.status(500).json({ error: "Failed to fetch trips" });
@@ -184,3 +209,4 @@ export const deleteTrip = async (req, res) => {
     res.status(500).json({ error: "Failed to delete trip" });
   }
 };
+

@@ -12,4 +12,3 @@ router.post("/fcm-token", verifyAuth, updateFcmToken);
 router.put("/fcm-token", verifyAuth, updateFcmToken);
 
 export default router;
-
